@@ -8,12 +8,12 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.0/fireba
 import { getAuth } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js';
 
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT.firebaseapp.com',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_PROJECT.appspot.com',
-  messagingSenderId: 'YOUR_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: "AIzaSyB9u3vZ7bCH6aV2LCmW0Wz9gbvJNmqNpW0",
+  authDomain: "skillscop-88629.firebaseapp.com",
+  projectId: "skillscop-88629",
+  storageBucket: "skillscop-88629.firebasestorage.app",
+  messagingSenderId: "444562834138",
+  appId: "1:444562834138:web:e9ef5eb71d59265c9b5be3"
 };
 
 export const app = initializeApp(firebaseConfig);
