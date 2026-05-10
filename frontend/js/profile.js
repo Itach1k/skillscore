@@ -109,6 +109,9 @@ function bindControls() {
   });
 
   exportPdfBtn.addEventListener('click', exportToPdf);
+
+  const deleteAllBtn = document.getElementById('deleteAllBtn');
+  if (deleteAllBtn) deleteAllBtn.addEventListener('click', onDeleteAll);
 }
 
 function fillPdfHeader(user, stats) {
@@ -256,15 +259,54 @@ function fillInterviewsList(interviews) {
       const score = i.analysis?.overallScore?.toFixed(1) ?? '—';
       const badge = MODE_BADGES[i.mode] || MODE_BADGES.technical;
       return `
-        <div class="interview-item">
+        <div class="interview-item" data-id="${escapeHtml(i.id)}">
           <div>
             <h4>${escapeHtml(i.topic)} <span class="mode-badge">${badge}</span></h4>
             <small>${date}</small>
           </div>
-          <div class="interview-score">${score} / 10</div>
+          <div class="interview-right">
+            <div class="interview-score">${score} / 10</div>
+            <button class="btn-delete-icon" title="Видалити це інтерв'ю" data-action="delete-one" data-id="${escapeHtml(i.id)}">🗑</button>
+          </div>
         </div>`;
     })
     .join('');
+
+  // Биндимо handlers після рендеру
+  list.querySelectorAll('[data-action="delete-one"]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onDeleteOne(btn.dataset.id);
+    });
+  });
+}
+
+async function onDeleteOne(id) {
+  if (!confirm('Видалити це інтерв\'ю? Дію не можна скасувати.')) return;
+  loader.hidden = false;
+  try {
+    await api.deleteInterview(id);
+    location.reload();
+  } catch (err) {
+    alert('Помилка видалення: ' + err.message);
+  } finally {
+    loader.hidden = true;
+  }
+}
+
+async function onDeleteAll() {
+  if (!confirm('Видалити ВСЮ історію інтерв\'ю та скинути статистику? Дію не можна скасувати.')) return;
+  if (!confirm('Точно видалити? Це остаточно.')) return;
+  loader.hidden = false;
+  try {
+    const result = await api.deleteAllInterviews();
+    alert(`Видалено інтерв'ю: ${result.deleted}`);
+    location.reload();
+  } catch (err) {
+    alert('Помилка: ' + err.message);
+  } finally {
+    loader.hidden = true;
+  }
 }
 
 function renderRoadmap(roadmap, generatedAt) {

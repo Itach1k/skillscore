@@ -34,15 +34,38 @@ async function request(method, url, body) {
   return res.json();
 }
 
+async function uploadFile(url, file, fieldName = 'cv') {
+  const token = await getToken();
+  const form = new FormData();
+  form.append(fieldName, file);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    let errMsg = `HTTP ${res.status}`;
+    try {
+      const errBody = await res.json();
+      errMsg = errBody.error || errMsg;
+    } catch { /* ignore */ }
+    throw new Error(errMsg);
+  }
+  return res.json();
+}
+
 export const api = {
-  startInterview: (topic, mode = 'technical', vacancyText) =>
-    request('POST', '/api/interview/start', { topic, mode, vacancyText }),
+  startInterview: (topic, mode = 'technical', vacancyText, cvSkills) =>
+    request('POST', '/api/interview/start', { topic, mode, vacancyText, cvSkills }),
   sendMessage: (interviewId, message) => request('POST', '/api/interview/message', { interviewId, message }),
   completeInterview: (interviewId) => request('POST', '/api/interview/complete', { interviewId }),
   getInterviews: () => request('GET', '/api/interview'),
   getInterview: (id) => request('GET', `/api/interview/${id}`),
+  deleteInterview: (id) => request('DELETE', `/api/interview/${id}`),
+  deleteAllInterviews: () => request('DELETE', '/api/interview/all'),
   getStatistics: () => request('GET', '/api/statistics'),
   getRoadmap: () => request('GET', '/api/roadmap'),
   generateRoadmap: () => request('POST', '/api/roadmap/generate'),
   getBenchmarks: () => request('GET', '/api/benchmarks'),
+  analyzeCv: (file) => uploadFile('/api/cv/analyze', file),
 };

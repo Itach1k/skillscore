@@ -30,6 +30,7 @@
         <button class="mode-tab active" data-mode="technical">🛠 Технічне</button>
         <button class="mode-tab" data-mode="softskills">🤝 Soft Skills</button>
         <button class="mode-tab" data-mode="vacancy">📄 Під вакансію</button>
+        <button class="mode-tab" data-mode="cv">📑 За резюме</button>
       </div>
 
       <!-- Technical -->
@@ -86,6 +87,46 @@
         <input type="text" id="vacancyTitle" placeholder="Коротка назва позиції (напр. Middle React Developer)" class="text-input" />
         <textarea id="vacancyText" placeholder="Вставте сюди повний текст опису вакансії (мінімум 30 символів)..." rows="10"></textarea>
         <button id="startVacancyBtn" class="btn-primary">Почати інтерв'ю</button>
+      </div>
+
+      <!-- CV -->
+      <div class="mode-panel cv-panel" data-mode="cv" hidden>
+        <p class="hint">Завантажте резюме у форматі PDF або DOCX. ШІ виділить ваші навички та проведе інтерв'ю саме за ними.</p>
+
+        <div id="cvUploadStage">
+          <label for="cvFileInput" class="file-drop">
+            <span class="file-drop-icon">📤</span>
+            <span class="file-drop-text">Натисніть для вибору файлу</span>
+            <span class="file-drop-hint">PDF або DOCX, до 5 MB</span>
+            <input type="file" id="cvFileInput" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
+          </label>
+          <div id="cvFileName" class="cv-filename muted" hidden></div>
+          <button id="analyzeCvBtn" class="btn-primary" disabled>Аналізувати резюме</button>
+        </div>
+
+        <div id="cvResultStage" hidden>
+          <h3>Знайдено в резюме:</h3>
+          <div id="cvSummary" class="cv-summary"></div>
+
+          <div class="cv-meta-row">
+            <div class="cv-meta-item">
+              <span class="cv-meta-label">Рівень:</span>
+              <span id="cvLevel" class="cv-meta-value">—</span>
+            </div>
+            <div class="cv-meta-item">
+              <span class="cv-meta-label">Досвід:</span>
+              <span id="cvYears" class="cv-meta-value">—</span>
+            </div>
+          </div>
+
+          <h4>Навички (натисніть, щоб виключити):</h4>
+          <div id="cvSkillsContainer" class="cv-skills"></div>
+
+          <div class="cv-actions">
+            <button id="resetCvBtn" class="btn-secondary">Інший файл</button>
+            <button id="startCvBtn" class="btn-primary">Почати інтерв'ю за обраними навичками</button>
+          </div>
+        </div>
       </div>
     </section>
 

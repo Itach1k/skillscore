@@ -22,6 +22,8 @@ const startVacancyBtn = $('startVacancyBtn');
 
 let currentInterviewId = null;
 let currentMode = 'technical';
+let cvAnalysis = null;          // результат /api/cv/analyze
+let cvSelectedSkills = new Set();
 
 const showLoader = (v) => (loader.hidden = !v);
 
@@ -71,6 +73,9 @@ const CRITERIA_LABELS = {
     });
   }
 
+  // CV
+  setupCvHandlers();
+
   sendBtn.addEventListener('click', sendMessage);
   messageInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -91,14 +96,14 @@ function appendMessage(role, content) {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-async function startInterview(topic, mode = 'technical', vacancyText = undefined) {
+async function startInterview(topic, mode = 'technical', vacancyText = undefined, cvSkills = undefined) {
   showLoader(true);
   try {
-    const { interviewId, message } = await api.startInterview(topic, mode, vacancyText);
+    const { interviewId, message } = await api.startInterview(topic, mode, vacancyText, cvSkills);
     currentInterviewId = interviewId;
     modeSelection.hidden = true;
     chatInterface.hidden = false;
-    currentTopicEl.textContent = topic;
+    currentTopicEl.textContent = topic || 'Інтерв\'ю за резюме';
     appendMessage('assistant', message);
     messageInput.focus();
   } catch (err) {
@@ -192,4 +197,108 @@ function renderAnalysis(a) {
     </div>
   `;
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ─────────────── CV upload & analysis ─────────────── */
+
+function setupCvHandlers() {
+  const fileInput = $('cvFileInput');
+  const analyzeBtn = $('analyzeCvBtn');
+  const resetBtn = $('resetCvBtn');
+  const startBtn = $('startCvBtn');
+  const fileNameEl = $('cvFileName');
+
+  if (!fileInput) return; // на випадок, якщо HTML не оновлено
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) {
+      analyzeBtn.disabled = true;
+      fileNameEl.hidden = true;
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Файл занадто великий. Максимум — 5 MB.');
+      fileInput.value = '';
+      return;
+    }
+    fileNameEl.textContent = `📄 ${file.name} (${formatBytes(file.size)})`;
+    fileNameEl.hidden = false;
+    analyzeBtn.disabled = false;
+  });
+
+  analyzeBtn.addEventListener('click', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    showLoader(true);
+    analyzeBtn.disabled = true;
+    try {
+      const result = await api.analyzeCv(file);
+      cvAnalysis = result;
+      cvSelectedSkills = new Set(result.skills);
+      renderCvResult(result);
+    } catch (err) {
+      alert('Помилка аналізу резюме: ' + err.message);
+    } finally {
+      showLoader(false);
+      analyzeBtn.disabled = false;
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    cvAnalysis = null;
+    cvSelectedSkills.clear();
+    fileInput.value = '';
+    fileNameEl.hidden = true;
+    analyzeBtn.disabled = true;
+    $('cvResultStage').hidden = true;
+    $('cvUploadStage').hidden = false;
+  });
+
+  startBtn.addEventListener('click', () => {
+    const skills = Array.from(cvSelectedSkills);
+    if (skills.length === 0) {
+      alert('Оберіть хоча б одну навичку для інтерв\'ю.');
+      return;
+    }
+    const title = `Інтерв'ю за резюме (${skills.slice(0, 3).join(', ')}${skills.length > 3 ? '…' : ''})`;
+    startInterview(title, 'cv', undefined, skills);
+  });
+}
+
+function renderCvResult(result) {
+  $('cvUploadStage').hidden = true;
+  $('cvResultStage').hidden = false;
+
+  $('cvSummary').textContent = result.summary || '—';
+  $('cvLevel').textContent = result.experienceLevel
+    ? result.experienceLevel.charAt(0).toUpperCase() + result.experienceLevel.slice(1)
+    : '—';
+  $('cvYears').textContent = result.yearsOfExperience
+    ? `${result.yearsOfExperience} р.`
+    : '—';
+
+  const container = $('cvSkillsContainer');
+  container.innerHTML = result.skills
+    .map((s) => `<button type="button" class="skill-chip selected" data-skill="${escapeHtml(s)}">${escapeHtml(s)}</button>`)
+    .join('');
+
+  container.querySelectorAll('.skill-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const skill = chip.dataset.skill;
+      if (cvSelectedSkills.has(skill)) {
+        cvSelectedSkills.delete(skill);
+        chip.classList.remove('selected');
+      } else {
+        cvSelectedSkills.add(skill);
+        chip.classList.add('selected');
+      }
+    });
+  });
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
