@@ -45,35 +45,56 @@ async function ensureUserDoc(user) {
 
 async function startInterview(req, res) {
   try {
-    const { topic, mode = 'technical', vacancyText } = req.body;
-    if (!topic || typeof topic !== 'string') {
-      return res.status(400).json({ error: 'topic is required' });
-    }
-    if (!['technical', 'softskills', 'vacancy'].includes(mode)) {
+    const { topic, mode = 'technical', vacancyText, cvSkills } = req.body;
+
+    if (!['technical', 'softskills', 'vacancy', 'cv'].includes(mode)) {
       return res.status(400).json({ error: 'invalid mode' });
+    }
+
+    // Валідація залежно від режиму
+    if (mode === 'cv') {
+      if (!Array.isArray(cvSkills) || cvSkills.length === 0) {
+        return res.status(400).json({ error: 'cvSkills must be a non-empty array' });
+      }
+    } else {
+      if (!topic || typeof topic !== 'string') {
+        return res.status(400).json({ error: 'topic is required' });
+      }
     }
     if (mode === 'vacancy' && (!vacancyText || vacancyText.trim().length < 30)) {
       return res.status(400).json({ error: 'vacancyText too short (мін. 30 символів)' });
     }
 
     const userRef = await ensureUserDoc(req.user);
-    const cfg = { mode, topic, vacancyText };
+
+    // Для CV-режиму topic для Gemini — це масив скілів,
+    // але у БД зберігаємо людський заголовок.
+    const displayTopic = mode === 'cv'
+      ? (topic && topic.trim() ? topic.trim() : `Інтерв'ю за резюме (${cvSkills.slice(0, 3).join(', ')}${cvSkills.length > 3 ? '…' : ''})`)
+      : topic;
+
+    const cfg = {
+      mode,
+      topic: mode === 'cv' ? cvSkills : topic,
+      vacancyText,
+    };
 
     const greeting = await generateInterviewResponse(
       cfg,
       [],
-      `Привіт! Я готовий до інтерв'ю на тему «${topic}». Постав мені перше питання.`
+      `Привіт! Я готовий до інтерв'ю. Постав мені перше питання.`
     );
 
     const now = new Date().toISOString();
     const interviewData = {
-      topic,
+      topic: displayTopic,
       mode,
       status: 'in-progress',
       createdAt: FieldValue.serverTimestamp(),
       messages: [{ role: 'assistant', content: greeting, timestamp: now }],
     };
     if (mode === 'vacancy') interviewData.vacancyText = vacancyText;
+    if (mode === 'cv') interviewData.cvSkills = cvSkills;
 
     const interviewRef = await userRef.collection('interviews').add(interviewData);
     res.json({ interviewId: interviewRef.id, message: greeting });
@@ -105,7 +126,7 @@ async function sendMessage(req, res) {
     const history = data.messages || [];
     const cfg = {
       mode: data.mode || 'technical',
-      topic: data.topic,
+      topic: data.mode === 'cv' ? (data.cvSkills || []) : data.topic,
       vacancyText: data.vacancyText,
     };
     const aiResponse = await generateInterviewResponse(cfg, history, message);
@@ -169,6 +190,7 @@ function serializeInterview(doc) {
     completedAt: d.completedAt?.toDate().toISOString() || null,
     messages: d.messages || [],
     analysis: d.analysis || null,
+    cvSkills: d.cvSkills || null,
   };
 }
 
@@ -200,4 +222,63 @@ async function getInterview(req, res) {
   }
 }
 
-module.exports = { startInterview, sendMessage, completeInterview, getInterviews, getInterview };
+async function deleteInterview(req, res) {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: 'id is required' });
+
+    const ref = db
+      .collection('users').doc(req.user.uid)
+      .collection('interviews').doc(id);
+
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ error: 'Not found' });
+
+    await ref.delete();
+    res.json({ success: true, deleted: 1 });
+  } catch (err) {
+    console.error('[deleteInterview]', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function deleteAllInterviews(req, res) {
+  try {
+    const collRef = db
+      .collection('users').doc(req.user.uid)
+      .collection('interviews');
+
+    const snap = await collRef.get();
+    if (snap.empty) return res.json({ success: true, deleted: 0 });
+
+    // Firestore обмежує batch до 500 операцій — обробляємо порціями.
+    const docs = snap.docs;
+    let deleted = 0;
+    const BATCH_SIZE = 400;
+
+    for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+      const batch = db.batch();
+      docs.slice(i, i + BATCH_SIZE).forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      deleted += Math.min(BATCH_SIZE, docs.length - i);
+    }
+
+    // Видаляємо також закешовану roadmap — вона стала неактуальною
+    try {
+      await db
+        .collection('users').doc(req.user.uid)
+        .collection('profile').doc('roadmap').delete();
+    } catch { /* roadmap може не існувати — ігноруємо */ }
+
+    res.json({ success: true, deleted });
+  } catch (err) {
+    console.error('[deleteAllInterviews]', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+module.exports = {
+  startInterview, sendMessage, completeInterview,
+  getInterviews, getInterview,
+  deleteInterview, deleteAllInterviews,
+};

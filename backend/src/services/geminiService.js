@@ -41,6 +41,26 @@ const COMMON_RULES = `
  * @param {string} [cfg.vacancyText] — повний текст вакансії (для mode='vacancy')
  */
 function buildInterviewSystemPrompt({ mode, topic, vacancyText }) {
+  if (mode === 'cv' && Array.isArray(topic) && topic.length > 0) {
+    // Тут topic — це масив скілів, виділених з CV
+    const skillsList = topic.map((s) => `- ${s}`).join('\n');
+    return `
+Ти — досвідчений технічний інтерв'юер. Тобі надано список технологій і навичок, які кандидат вказав у своєму резюме.
+Твоє завдання — провести співбесіду, що буде сфокусована саме на цих навичках.
+
+НАВИЧКИ КАНДИДАТА З РЕЗЮМЕ:
+${skillsList}
+
+${COMMON_RULES}
+
+Додатково для CV-режиму:
+- Перші 1-2 питання — про основні (найчастіше згадувані) технології з резюме.
+- Принаймні одне питання має перевіряти глибину знань — не просто «що це?», а «як працює всередині», «коли застосовувати», «які підводні камені».
+- Питай про комбінацію декількох технологій разом (як вони взаємодіють у реальних проєктах).
+- Якщо в резюме є рідкісна або вузькоспеціалізована технологія — обов'язково запитай про неї.
+`.trim();
+  }
+
   if (mode === 'vacancy' && vacancyText) {
     return `
 Ти — досвідчений технічний інтерв'юер. Тобі надано опис конкретної вакансії, на яку претендує кандидат.
@@ -265,4 +285,58 @@ async function generateRoadmap(statsByCriteria, recentTopics = []) {
   }
 }
 
-module.exports = { generateInterviewResponse, analyzeInterview, generateRoadmap };
+/* ───────── Витяг навичок з резюме (CV) ───────── */
+
+const cvAnalysisPrompt = (cvText) => `
+Ти — досвідчений технічний рекрутер. Тобі надано текст резюме кандидата.
+Твоє завдання — витягти структуровану інформацію про його технічні навички та досвід.
+
+ТЕКСТ РЕЗЮМЕ:
+"""
+${cvText}
+"""
+
+ВИМОГИ:
+- Виділи всі технічні навички, фреймворки, мови програмування, інструменти, бази даних.
+- НЕ включай soft skills, особисті якості, мови спілкування — лише технічні навички.
+- Оціни рівень кандидата на основі досвіду та використаних технологій: junior / middle / senior.
+- Сформуй 4-6 пропонованих тем для технічного інтерв'ю на основі основних навичок з резюме.
+
+Поверни ТІЛЬКИ JSON-об'єкт у форматі (без markdown-обгортки):
+
+{
+  "skills": ["<навичка 1>", "<навичка 2>", ...],
+  "experienceLevel": "junior" | "middle" | "senior",
+  "yearsOfExperience": <число або null>,
+  "suggestedTopics": [
+    "<тема 1>",
+    "<тема 2>",
+    ...
+  ],
+  "summary": "<коротке резюме кандидата українською, 1-2 речення>"
+}
+`.trim();
+
+/**
+ * Витягує структуровану інформацію про навички з тексту резюме.
+ * @param {string} cvText — сирий текст резюме
+ * @returns {Promise<Object>}
+ */
+async function extractSkillsFromCV(cvText) {
+  const model = genAI.getGenerativeModel({
+    model: MODEL_NAME,
+    generationConfig: { temperature: 0.3, responseMimeType: 'application/json' },
+  });
+
+  const result = await model.generateContent(cvAnalysisPrompt(cvText));
+  const text = result.response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error('Gemini returned invalid CV analysis JSON');
+  }
+}
+
+module.exports = { generateInterviewResponse, analyzeInterview, generateRoadmap, extractSkillsFromCV };
