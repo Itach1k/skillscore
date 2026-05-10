@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkillScope — Профіль</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-logo">📊 SkillScope</div>
+    <div class="nav-links">
+      <a href="interview.html">Інтерв'ю</a>
+      <a href="profile.html" class="active">Мій профіль</a>
+    </div>
+    <div class="nav-user">
+      <img id="userAvatar" alt="" />
+      <span id="userName"></span>
+      <button id="signOutBtn" class="btn-link">Вийти</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1 class="page-title">Аналітика технічних навичок</h1>
+      <button id="exportPdfBtn" class="btn-secondary" hidden>📄 Завантажити PDF-звіт</button>
+    </div>
+
+    <div id="emptyState" class="empty-state" hidden>
+      <span>📊</span>
+      <h2>Ще немає завершених інтерв'ю</h2>
+      <p>Пройдіть перше інтерв'ю, щоб побачити статистику навичок.</p>
+      <a href="interview.html" class="btn-primary">Почати інтерв'ю</a>
+    </div>
+
+    <div id="profileContent" hidden>
+      <!-- Шапка для PDF -->
+      <div class="pdf-header" id="pdfHeader">
+        <h2>SkillScope — звіт про компетенції</h2>
+        <p id="pdfMeta"></p>
+      </div>
+
+      <div class="stats-cards">
+        <div class="stat-card">
+          <div class="stat-label">Всього інтерв'ю</div>
+          <div id="totalInterviews" class="stat-value">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Середній бал</div>
+          <div id="averageScore" class="stat-value">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Медіана</div>
+          <div id="medianScore" class="stat-value">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Найвищий результат</div>
+          <div id="maxScore" class="stat-value">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Прогрес</div>
+          <div id="progressIndicator" class="stat-value">—</div>
+        </div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Профіль навичок vs Еталон</h3>
+            <select id="benchmarkSelect" class="select-inline">
+              <option value="none">Без порівняння</option>
+              <option value="junior" selected>vs Junior</option>
+              <option value="middle">vs Middle</option>
+              <option value="senior">vs Senior</option>
+            </select>
+          </div>
+          <canvas id="radarChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Динаміка прогресу</h3>
+          <canvas id="lineChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card full-width">
+        <h3>Описова статистика за критеріями</h3>
+        <div class="table-wrap">
+          <table id="statsTable" class="stats-table">
+            <thead>
+              <tr>
+                <th>Критерій</th>
+                <th>Середнє</th>
+                <th>Медіана</th>
+                <th>Std. dev</th>
+                <th>Q1</th>
+                <th>Q3</th>
+                <th>Min</th>
+                <th>Max</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Roadmap -->
+      <div class="chart-card full-width">
+        <div class="chart-card-header">
+          <h3>🗺 Персоналізована дорожня карта</h3>
+          <button id="generateRoadmapBtn" class="btn-primary">Згенерувати план</button>
+        </div>
+        <div id="roadmapEmpty" class="muted">
+          Натисніть кнопку, щоб ШІ створив для вас індивідуальний план розвитку
+          на основі вашої статистики (4–6 тижневих модулів).
+        </div>
+        <div id="roadmapContent" hidden></div>
+      </div>
+
+      <div class="chart-card full-width">
+        <h3>Історія інтерв'ю</h3>
+        <div id="interviewsList" class="interviews-list"></div>
+      </div>
+    </div>
+  </main>
+
+  <div id="loader" class="loader" hidden><div class="spinner"></div></div>
+
+  <script type="module" src="js/auth.js"></script>
+  <script type="module" src="js/profile.js"></script>
+</body>
+</html>

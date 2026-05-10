@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkillScope — Інтерв'ю</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-logo">📊 SkillScope</div>
+    <div class="nav-links">
+      <a href="interview.html" class="active">Інтерв'ю</a>
+      <a href="profile.html">Мій профіль</a>
+    </div>
+    <div class="nav-user">
+      <img id="userAvatar" alt="" />
+      <span id="userName"></span>
+      <button id="signOutBtn" class="btn-link">Вийти</button>
+    </div>
+  </nav>
+
+  <main class="container">
+    <!-- 1. Вибір режиму -->
+    <section id="modeSelection" class="topic-selection">
+      <h1>Оберіть формат інтерв'ю</h1>
+      <p>Три режими відповідно до різних цілей підготовки.</p>
+
+      <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="technical">🛠 Технічне</button>
+        <button class="mode-tab" data-mode="softskills">🤝 Soft Skills</button>
+        <button class="mode-tab" data-mode="vacancy">📄 Під вакансію</button>
+      </div>
+
+      <!-- Technical -->
+      <div class="mode-panel" data-mode="technical">
+        <div class="topic-grid">
+          <button class="topic-card" data-topic="JavaScript та сучасний фронтенд (HTML/CSS/JS, ES6+)">
+            <span>🟨</span><h3>JavaScript / Frontend</h3>
+          </button>
+          <button class="topic-card" data-topic="Node.js та бекенд-розробка (Express, REST API)">
+            <span>🟩</span><h3>Node.js / Backend</h3>
+          </button>
+          <button class="topic-card" data-topic="Алгоритми та структури даних">
+            <span>🧮</span><h3>Алгоритми</h3>
+          </button>
+          <button class="topic-card" data-topic="Проєктування системної архітектури (System Design)">
+            <span>🏛️</span><h3>System Design</h3>
+          </button>
+          <button class="topic-card" data-topic="Бази даних (SQL та NoSQL)">
+            <span>🗄️</span><h3>Бази даних</h3>
+          </button>
+          <button class="topic-card" data-topic="DevOps, Docker, CI/CD">
+            <span>⚙️</span><h3>DevOps</h3>
+          </button>
+        </div>
+      </div>
+
+      <!-- Soft Skills -->
+      <div class="mode-panel" data-mode="softskills" hidden>
+        <div class="topic-grid">
+          <button class="topic-card" data-topic="Реакція на критику та зворотний зв'язок">
+            <span>💬</span><h3>Робота з критикою</h3>
+          </button>
+          <button class="topic-card" data-topic="Командна робота та вирішення конфліктів">
+            <span>👥</span><h3>Робота в команді</h3>
+          </button>
+          <button class="topic-card" data-topic="Управління дедлайнами та пріоритетами">
+            <span>⏰</span><h3>Дедлайни</h3>
+          </button>
+          <button class="topic-card" data-topic="Пояснення складних технічних концепцій нетехнічним людям">
+            <span>🎓</span><h3>Комунікація</h3>
+          </button>
+          <button class="topic-card" data-topic="Прийняття рішень в умовах невизначеності">
+            <span>🧭</span><h3>Прийняття рішень</h3>
+          </button>
+          <button class="topic-card" data-topic="Лідерство та менторинг молодших колег">
+            <span>🌟</span><h3>Лідерство</h3>
+          </button>
+        </div>
+      </div>
+
+      <!-- Vacancy -->
+      <div class="mode-panel vacancy-panel" data-mode="vacancy" hidden>
+        <p class="hint">Вставте опис вакансії (з DOU, LinkedIn, Djinni) — ШІ задаватиме питання саме за вимогами.</p>
+        <input type="text" id="vacancyTitle" placeholder="Коротка назва позиції (напр. Middle React Developer)" class="text-input" />
+        <textarea id="vacancyText" placeholder="Вставте сюди повний текст опису вакансії (мінімум 30 символів)..." rows="10"></textarea>
+        <button id="startVacancyBtn" class="btn-primary">Почати інтерв'ю</button>
+      </div>
+    </section>
+
+    <!-- 2. Чат -->
+    <section id="chatInterface" class="chat-interface" hidden>
+      <div class="chat-header">
+        <h2>Тема: <span id="currentTopic"></span></h2>
+        <button id="endInterviewBtn" class="btn-danger">Завершити інтерв'ю</button>
+      </div>
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-input">
+        <textarea id="messageInput" placeholder="Введіть відповідь… (Shift+Enter — новий рядок)"></textarea>
+        <button id="sendBtn" class="btn-primary">Надіслати</button>
+      </div>
+    </section>
+
+    <!-- 3. Аналіз -->
+    <section id="analysisResult" class="analysis-result" hidden>
+      <h1>🎉 Аналіз вашого інтерв'ю</h1>
+      <div id="analysisContent"></div>
+      <div class="analysis-actions">
+        <button id="newInterviewBtn" class="btn-primary">Нове інтерв'ю</button>
+        <a href="profile.html" class="btn-secondary">Перейти у профіль</a>
+      </div>
+    </section>
+  </main>
+
+  <div id="loader" class="loader" hidden><div class="spinner"></div></div>
+
+  <script type="module" src="js/auth.js"></script>
+  <script type="module" src="js/interview.js"></script>
+</body>
+</html>
