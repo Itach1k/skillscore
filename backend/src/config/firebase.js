@@ -15,11 +15,26 @@ const keyPath = path.join(__dirname, '../../serviceAccountKey.json');
 if (!admin.apps.length) {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     try {
-      const credentials = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON.trim();
+      // Підтримуємо як сирий JSON, так і base64-encoded JSON
+      const jsonText = raw.startsWith('{')
+        ? raw
+        : Buffer.from(raw, 'base64').toString('utf8');
+
+      const credentials = JSON.parse(jsonText);
+
+      // КРИТИЧНО: при передачі через env-vars символи \n у private_key
+      // можуть прийти як літеральні 2 символи замість справжніх переносів.
+      // Без цього виправлення PEM-ключ невалідний → UNAUTHENTICATED при запитах до Firestore.
+      if (credentials.private_key && credentials.private_key.includes('\\n')) {
+        credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+      }
+
       admin.initializeApp({ credential: admin.credential.cert(credentials) });
       console.log('[Firebase] Initialized via FIREBASE_SERVICE_ACCOUNT_JSON env var');
+      console.log('[Firebase] Project ID:', credentials.project_id);
     } catch (err) {
-      console.error('[Firebase] FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON:', err.message);
+      console.error('[Firebase] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', err.message);
       process.exit(1);
     }
   } else if (fs.existsSync(keyPath)) {
