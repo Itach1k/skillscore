@@ -19,6 +19,34 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey);
 const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 
+/* ───────── Retry-обгортка для 429 ───────── */
+
+/**
+ * Виконує функцію fn, при отриманні 429 з малим retryDelay (≤30 сек)
+ * робить одну повторну спробу. Це покриває типовий випадок «бурст» —
+ * коли користувач натиснув кілька кнопок одну за одною і впав у RPM-ліміт.
+ */
+async function withRetry(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err.status !== 429) throw err;
+
+    const retryInfo = err.errorDetails?.find((d) =>
+      String(d['@type']).includes('RetryInfo')
+    );
+    const m = String(retryInfo?.retryDelay || '').match(/(\d+(?:\.\d+)?)s/);
+    const delaySec = m ? parseFloat(m[1]) : null;
+
+    // Чекаємо лише при коротких затримках — інакше це денний ліміт
+    if (delaySec === null || delaySec > 30) throw err;
+
+    console.log(`[Gemini] 429 burst, retrying in ${delaySec}s...`);
+    await new Promise((r) => setTimeout(r, (delaySec + 1) * 1000));
+    return await fn();
+  }
+}
+
 /* ───────── Промпти для трьох режимів інтерв'ю ───────── */
 
 const COMMON_RULES = `
@@ -137,7 +165,7 @@ async function generateInterviewResponse(cfg, history, userMessage) {
   const cleanedHistory = firstUserIdx >= 0 ? geminiHistory.slice(firstUserIdx) : [];
 
   const chat = model.startChat({ history: cleanedHistory });
-  const result = await chat.sendMessage(userMessage);
+  const result = await withRetry(() => chat.sendMessage(userMessage));
   return result.response.text().trim();
 }
 
@@ -190,7 +218,7 @@ async function analyzeInterview(topic, conversation) {
     },
   });
 
-  const result = await model.generateContent(analysisPrompt(topic, conversation));
+  const result = await withRetry(() => model.generateContent(analysisPrompt(topic, conversation)));
   const text = result.response.text();
 
   try {
@@ -274,7 +302,7 @@ async function generateRoadmap(statsByCriteria, recentTopics = []) {
     .sort((a, b) => a.score - b.score)
     .slice(0, 2);
 
-  const result = await model.generateContent(roadmapPrompt(flat, weakest, recentTopics));
+  const result = await withRetry(() => model.generateContent(roadmapPrompt(flat, weakest, recentTopics)));
   const text = result.response.text();
   try {
     return JSON.parse(text);
@@ -328,7 +356,7 @@ async function extractSkillsFromCV(cvText) {
     generationConfig: { temperature: 0.3, responseMimeType: 'application/json' },
   });
 
-  const result = await model.generateContent(cvAnalysisPrompt(cvText));
+  const result = await withRetry(() => model.generateContent(cvAnalysisPrompt(cvText)));
   const text = result.response.text();
   try {
     return JSON.parse(text);

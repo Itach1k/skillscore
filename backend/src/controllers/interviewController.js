@@ -9,24 +9,12 @@
 
 const { admin, db } = require('../config/firebase');
 const { generateInterviewResponse, analyzeInterview } = require('../services/geminiService');
+const { handleApiError } = require('../utils/errorHandler');
 
 const FieldValue = admin.firestore.FieldValue;
 
-/** Дружня обробка помилок від Gemini API. */
-function handleError(res, err, prefix) {
-  console.error(prefix, err);
-  if (err.status === 429) {
-    const retryInfo = err.errorDetails?.find((d) =>
-      String(d['@type']).includes('RetryInfo')
-    );
-    const retryDelay = retryInfo?.retryDelay || '60s';
-    return res.status(429).json({
-      error: `Перевищено ліміт безкоштовного тиру Gemini API. Спробуйте через ${retryDelay}, ` +
-        `або змініть GEMINI_MODEL у backend/.env на gemini-2.5-flash-lite (15 RPM / 1000 RPD).`,
-    });
-  }
-  res.status(500).json({ error: err.message });
-}
+// Локальна обгортка для збереження старої сигнатури викликів
+const handleError = (res, err, prefix) => handleApiError(res, err, prefix);
 
 /** Гарантуємо, що документ users/{uid} існує (створюємо при першому інтерв'ю). */
 async function ensureUserDoc(user) {

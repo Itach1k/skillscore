@@ -8,16 +8,7 @@
 
 const { extractTextFromCV } = require('../services/cvService');
 const { extractSkillsFromCV } = require('../services/geminiService');
-
-function handleError(res, err, prefix) {
-  console.error(prefix, err);
-  if (err.status === 429) {
-    return res.status(429).json({
-      error: 'Перевищено ліміт Gemini API. Спробуйте за хвилину або змініть GEMINI_MODEL у .env.',
-    });
-  }
-  res.status(500).json({ error: err.message });
-}
+const { handleApiError: handleError } = require('../utils/errorHandler');
 
 async function analyzeCv(req, res) {
   try {

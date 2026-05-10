@@ -10,18 +10,9 @@
 const { admin, db } = require('../config/firebase');
 const { generateRoadmap } = require('../services/geminiService');
 const { calculateUserStatistics } = require('../services/statisticsService');
+const { handleApiError: handleError } = require('../utils/errorHandler');
 
 const FieldValue = admin.firestore.FieldValue;
-
-function handleError(res, err, prefix) {
-  console.error(prefix, err);
-  if (err.status === 429) {
-    return res.status(429).json({
-      error: 'Перевищено ліміт Gemini API. Спробуйте за хвилину або змініть GEMINI_MODEL у .env.',
-    });
-  }
-  res.status(500).json({ error: err.message });
-}
 
 async function getRoadmap(req, res) {
   try {
