@@ -1,18 +1,12 @@
 /**
- * Логіка автентифікації:
- *   - вхід через Google (signInWithPopup)
- *   - редіректи між сторінками залежно від стану
- *   - заповнення меню (аватар, ім'я)
- *   - вихід
+ * Логіка автентифікації (лише для десктопних браузерів).
+ * На мобільних — показуємо повідомлення про несумісність замість логіки входу.
  */
 
 import { auth } from './firebase-config.js';
 import {
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  browserPopupRedirectResolver,
   onAuthStateChanged,
   signOut,
 } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js';
@@ -31,61 +25,46 @@ function isLoginPage() {
   return p === '/' || p.endsWith('/index.html');
 }
 
-// Обробляємо результат redirect-flow при поверненні на login-page
-if (isLoginPage()) {
-  getRedirectResult(auth)
-    .then((result) => {
-      if (result?.user) {
-        // Успіх — onAuthStateChanged нижче зробить редірект на interview.html
-        console.log('[Auth] Redirect sign-in успішний:', result.user.email);
-      }
-    })
-    .catch((err) => {
-      console.error('[Auth] Redirect result error:', err.code, err.message);
-      // Тихо ігноруємо "no-auth-event" — це нормально при першому заході
-      if (err.code && err.code !== 'auth/no-auth-event') {
-        sessionStorage.setItem('lastAuthError', `${err.code}: ${err.message}`);
-      }
-    });
+// Якщо користувач зайшов з мобільного пристрою — показуємо стоп-екран
+if (isMobileDevice()) {
+  showMobileBlocker();
+}
+
+function showMobileBlocker() {
+  // Прибираємо весь основний контент і показуємо повідомлення
+  const html = `
+    <div style="
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #5b6cf0 0%, #8b5cf6 100%);
+      color: white; padding: 24px; text-align: center; z-index: 9999;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    ">
+      <div style="max-width: 420px;">
+        <div style="font-size: 56px; margin-bottom: 16px;">💻</div>
+        <h1 style="font-size: 24px; margin-bottom: 12px;">Лише для ПК</h1>
+        <p style="font-size: 15px; line-height: 1.5; opacity: 0.95; margin-bottom: 8px;">
+          SkillScope потребує комп'ютера з повноцінною клавіатурою для проходження
+          технічних інтерв'ю.
+        </p>
+        <p style="font-size: 14px; opacity: 0.8;">
+          Відкрийте сайт у браузері на ноутбуці або ПК.
+        </p>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
 }
 
 if (googleSignInBtn) {
   googleSignInBtn.addEventListener('click', async () => {
     const provider = new GoogleAuthProvider();
-    // Просимо вибрати акаунт явно щоразу (запобігає silent-redirect конфліктам)
-    provider.setCustomParameters({ prompt: 'select_account' });
-
-    const useMobileFlow = isMobileDevice();
-
     try {
-      if (useMobileFlow) {
-        // На мобільних — redirect-flow.
-        // Браузер сам перенесе на accounts.google.com, потім назад на твій сайт.
-        await signInWithRedirect(auth, provider);
-        // Після цього виконання коду тут не продовжиться — браузер пішов на Google.
-      } else {
-        // Desktop — popup
-        await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-        // onAuthStateChanged зробить редірект
-      }
+      await signInWithPopup(auth, provider);
+      window.location.href = 'interview.html';
     } catch (err) {
-      console.error('[Auth] Sign-in error:', err.code, err.message);
-
-      // Якщо popup заблоковано на десктопі — fallback на redirect
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
-        try {
-          await signInWithRedirect(auth, provider);
-          return;
-        } catch (e) {
-          alert('Не вдалося відкрити вікно входу. Перевірте дозволи браузера.');
-          return;
-        }
-      }
-
-      const msg = err.code === 'auth/unauthorized-domain'
-        ? 'Цей домен не дозволений у Firebase. Додайте його в Authentication → Settings → Authorized domains.'
-        : `Помилка входу: ${err.message}`;
-      alert(msg);
+      console.error('[Auth] Sign-in error:', err);
+      alert('Помилка входу: ' + err.message);
     }
   });
 }

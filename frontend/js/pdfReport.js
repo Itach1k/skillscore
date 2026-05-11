@@ -48,11 +48,13 @@ export async function generatePdfReport({
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
 
   // Реєструємо шрифт з підтримкою кирилиці
-  // jsPDF за замовчуванням підтримує лише Latin1, тому використовуємо вбудовану підтримку Unicode
-  // через шрифт "helvetica" — він має базову кирилицю в більшості рендерів через WinAnsi.
-  // Для якісної кирилиці підключаємо Roboto через addFont.
-  await registerCyrillicFont(doc);
-  doc.setFont('Roboto', 'normal');
+  const fontOk = await registerCyrillicFont(doc);
+  if (fontOk) {
+    doc.setFont('DejaVuSans', 'normal');
+  } else {
+    // Якщо шрифт не завантажився — попереджаємо користувача
+    throw new Error('Не вдалося завантажити шрифт для PDF. Перевірте інтернет-з\'єднання та спробуйте ще раз.');
+  }
 
   let y = PAGE.marginTop;
 
@@ -108,40 +110,81 @@ export async function generatePdfReport({
 /* ═══════════════════ HELPERS ═══════════════════ */
 
 /**
- * Завантажує і реєструє шрифт Roboto з кирилицею.
- * Шрифт у форматі base64 інлайнимо через fetch + конвертацію.
+ * Завантажує і реєструє шрифт DejaVu Sans з кирилицею у jsPDF.
+ * jsPDF.addFileToVFS приймає файл як binary string (не base64).
+ * DejaVu Sans — public-domain шрифт з повною підтримкою кирилиці.
  */
 async function registerCyrillicFont(doc) {
-  // Roboto Regular з підтримкою кирилиці — кешуємо в localStorage щоб не качати щоразу
-  const CACHE_KEY = 'skillscope_roboto_font_v1';
-  let base64 = (typeof localStorage !== 'undefined') ? localStorage.getItem(CACHE_KEY) : null;
+  const CACHE_KEY = 'skillscope_dejavu_v1_binary';
+  let binary = null;
 
-  if (!base64) {
-    try {
-      // Безкоштовний CDN для шрифтів TTF з підтримкою кирилиці
-      const url = 'https://cdn.jsdelivr.net/gh/google/fonts@main/apache/roboto/Roboto%5Bwdth%2Cwght%5D.ttf';
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Font fetch failed');
-      const buf = await res.arrayBuffer();
-      base64 = arrayBufferToBase64(buf);
-      try { localStorage.setItem(CACHE_KEY, base64); } catch { /* quota — ігноруємо */ }
-    } catch (err) {
-      console.warn('[PDF] Не вдалося завантажити шрифт, кирилиця може некоректно відображатися:', err);
-      return;
+  // Спробуємо взяти з кешу
+  try {
+    binary = localStorage.getItem(CACHE_KEY);
+  } catch { /* localStorage недоступний */ }
+
+  if (!binary) {
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf',
+      'https://unpkg.com/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf',
+      'https://cdn.jsdelivr.net/npm/@vintproykt/dejavu-fonts-ttf@2.37.0/ttf/DejaVuSans.ttf',
+    ];
+
+    let buf = null;
+    let lastErr = null;
+    for (const url of urls) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          lastErr = new Error(`HTTP ${res.status} from ${url}`);
+          continue;
+        }
+        buf = await res.arrayBuffer();
+        // Перевірка: TTF починається з 0x00 0x01 0x00 0x00 або 'true' / 'OTTO'
+        const head = new Uint8Array(buf, 0, 4);
+        const sig = String.fromCharCode(...head);
+        const validTtf =
+          (head[0] === 0x00 && head[1] === 0x01) || sig === 'true' || sig === 'OTTO';
+        if (!validTtf) {
+          lastErr = new Error(`Invalid TTF signature from ${url}`);
+          buf = null;
+          continue;
+        }
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
     }
+
+    if (!buf) {
+      console.error('[PDF] Font download failed:', lastErr);
+      return false;
+    }
+
+    // Конвертуємо ArrayBuffer у binary string (1 байт = 1 char)
+    const bytes = new Uint8Array(buf);
+    const CHUNK = 0x8000;
+    const parts = [];
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      parts.push(String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK, bytes.length))));
+    }
+    binary = parts.join('');
+
+    try { localStorage.setItem(CACHE_KEY, binary); } catch { /* quota — ок */ }
   }
 
-  doc.addFileToVFS('Roboto.ttf', base64);
-  doc.addFont('Roboto.ttf', 'Roboto', 'normal');
-  doc.addFont('Roboto.ttf', 'Roboto', 'bold'); // використаємо той самий, відрізнятиметься через setFont
-}
-
-function arrayBufferToBase64(buffer) {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
+  try {
+    doc.addFileToVFS('DejaVuSans.ttf', binary);
+    doc.addFont('DejaVuSans.ttf', 'DejaVuSans', 'normal');
+    // 'bold' style — використовуємо той самий файл, jsPDF не зламається, але виглядати буде як normal
+    doc.addFont('DejaVuSans.ttf', 'DejaVuSans', 'bold');
+    return true;
+  } catch (e) {
+    console.error('[PDF] Font registration failed:', e);
+    // Зіпсований кеш — очищуємо
+    try { localStorage.removeItem(CACHE_KEY); } catch {}
+    return false;
+  }
 }
 
 function ensureSpace(doc, y, needed) {
@@ -317,7 +360,7 @@ function drawStatsTable(doc, y, byCriteria) {
   doc.autoTable({
     startY: y,
     head, body,
-    styles: { font: 'Roboto', fontSize: 9, cellPadding: 2 },
+    styles: { font: 'DejaVuSans', fontSize: 9, cellPadding: 2 },
     headStyles: { fillColor: C.primary, textColor: 255, fontStyle: 'normal' },
     columnStyles: { 0: { cellWidth: 50, fontStyle: 'normal' } },
     margin: { left: PAGE.marginX, right: PAGE.marginX },
@@ -483,7 +526,7 @@ function drawHistory(doc, y, interviews) {
     startY: y,
     head: [['Тема', 'Режим', 'Дата', 'Бал']],
     body,
-    styles: { font: 'Roboto', fontSize: 9, cellPadding: 2.5 },
+    styles: { font: 'DejaVuSans', fontSize: 9, cellPadding: 2.5 },
     headStyles: { fillColor: C.primary, textColor: 255 },
     columnStyles: {
       0: { cellWidth: 'auto' },
