@@ -10,6 +10,8 @@ import { auth } from './firebase-config.js';
 import {
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   onAuthStateChanged,
   signOut,
 } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js';
@@ -19,20 +21,44 @@ const signOutBtn = document.getElementById('signOutBtn');
 const userAvatar = document.getElementById('userAvatar');
 const userName = document.getElementById('userName');
 
+function isMobile() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || window.innerWidth < 768;
+}
+
 function isLoginPage() {
   const p = window.location.pathname;
   return p === '/' || p.endsWith('/index.html');
+}
+
+// Обробка повернення з redirect-flow (потрібно лише на login-page)
+if (isLoginPage()) {
+  getRedirectResult(auth).catch((err) => {
+    if (err.code !== 'auth/no-auth-event' && err.code !== 'auth/null-user') {
+      console.error('[Auth] Redirect result error:', err);
+    }
+  });
 }
 
 if (googleSignInBtn) {
   googleSignInBtn.addEventListener('click', async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      window.location.href = 'interview.html';
+      if (isMobile()) {
+        // На мобільних попап часто блокується / не повертає фокус
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+        window.location.href = 'interview.html';
+      }
     } catch (err) {
       console.error('[Auth] Sign-in error:', err);
-      alert('Помилка входу: ' + err.message);
+      if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+        // Fallback на redirect
+        try { await signInWithRedirect(auth, provider); } catch (e) { alert('Не вдалося увійти. Спробуйте ще раз.'); }
+      } else {
+        alert('Помилка входу: ' + err.message);
+      }
     }
   });
 }

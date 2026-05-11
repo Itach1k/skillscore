@@ -130,6 +130,18 @@
 
   <div id="loader" class="loader" hidden><div class="spinner"></div></div>
 
+  <!-- Modal: перегляд транскрипту інтерв'ю -->
+  <div id="interviewModal" class="modal" hidden>
+    <div class="modal-overlay" data-close="modal"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">Інтерв'ю</h2>
+        <button class="modal-close" data-close="modal">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
   <script type="module" src="js/auth.js"></script>
   <script type="module" src="js/profile.js"></script>
 </body>

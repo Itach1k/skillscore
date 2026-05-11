@@ -80,8 +80,9 @@ let currentUser = null;
     }
 
     bindControls();
+    setupModalHandlers();
   } catch (err) {
-    alert('Помилка: ' + err.message);
+    alert(err.message);
   } finally {
     loader.hidden = true;
   }
@@ -100,7 +101,7 @@ function bindControls() {
       const { roadmap, generatedAt } = await api.generateRoadmap();
       renderRoadmap(roadmap, generatedAt);
     } catch (err) {
-      alert('Помилка генерації плану: ' + err.message);
+      alert(err.message);
     } finally {
       loader.hidden = true;
       generateRoadmapBtn.disabled = false;
@@ -259,7 +260,7 @@ function fillInterviewsList(interviews) {
       const score = i.analysis?.overallScore?.toFixed(1) ?? '—';
       const badge = MODE_BADGES[i.mode] || MODE_BADGES.technical;
       return `
-        <div class="interview-item" data-id="${escapeHtml(i.id)}">
+        <div class="interview-item" data-id="${escapeHtml(i.id)}" data-action="view" role="button" tabindex="0">
           <div>
             <h4>${escapeHtml(i.topic)} <span class="mode-badge">${badge}</span></h4>
             <small>${date}</small>
@@ -279,6 +280,105 @@ function fillInterviewsList(interviews) {
       onDeleteOne(btn.dataset.id);
     });
   });
+  list.querySelectorAll('[data-action="view"]').forEach((item) => {
+    item.addEventListener('click', () => onViewInterview(item.dataset.id));
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onViewInterview(item.dataset.id);
+      }
+    });
+  });
+}
+
+async function onViewInterview(id) {
+  const loader = document.getElementById('loader');
+  loader.hidden = false;
+  try {
+    const interview = await api.getInterview(id);
+    showInterviewModal(interview);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    loader.hidden = true;
+  }
+}
+
+function showInterviewModal(interview) {
+  const modal = document.getElementById('interviewModal');
+  const title = document.getElementById('modalTitle');
+  const body = document.getElementById('modalBody');
+
+  title.textContent = interview.topic;
+
+  const date = interview.completedAt
+    ? new Date(interview.completedAt).toLocaleString('uk-UA')
+    : '—';
+  const badge = MODE_BADGES[interview.mode] || MODE_BADGES.technical;
+
+  const messagesHtml = (interview.messages || [])
+    .map((m) => `
+      <div class="modal-msg ${m.role}">
+        <div class="modal-msg-role">${m.role === 'assistant' ? '🤖 Інтерв\'юер' : '👤 Ви'}</div>
+        <div class="modal-msg-bubble">${escapeHtml(m.content)}</div>
+      </div>
+    `).join('');
+
+  const a = interview.analysis;
+  const analysisHtml = a ? `
+    <div class="modal-analysis">
+      <h3>📊 Аналіз результатів</h3>
+      <div class="modal-overall">
+        <div class="modal-score-circle">${a.overallScore.toFixed(1)}</div>
+        <p>${escapeHtml(a.feedback || '')}</p>
+      </div>
+      <div class="modal-scores">
+        ${Object.entries(a.scores).map(([k, v]) => `
+          <div class="modal-score-row">
+            <span>${CRITERIA_LABELS[k] || k}</span>
+            <div class="modal-score-bar"><div class="modal-score-fill" style="width:${v * 10}%"></div></div>
+            <strong>${v}/10</strong>
+          </div>
+        `).join('')}
+      </div>
+      ${a.strengths?.length ? `<div class="modal-section"><h4>✅ Сильні сторони</h4><ul>${a.strengths.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul></div>` : ''}
+      ${a.weaknesses?.length ? `<div class="modal-section"><h4>⚠️ Зони росту</h4><ul>${a.weaknesses.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul></div>` : ''}
+      ${a.recommendations?.length ? `<div class="modal-section"><h4>💡 Рекомендації</h4><ul>${a.recommendations.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul></div>` : ''}
+    </div>
+  ` : '';
+
+  body.innerHTML = `
+    <div class="modal-meta">
+      <span class="mode-badge">${badge}</span>
+      <small>${date}</small>
+    </div>
+    <details class="modal-transcript" open>
+      <summary>💬 Транскрипт (${interview.messages?.length || 0} повідомлень)</summary>
+      <div class="modal-messages">${messagesHtml}</div>
+    </details>
+    ${analysisHtml}
+  `;
+
+  modal.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+
+function setupModalHandlers() {
+  const modal = document.getElementById('interviewModal');
+  if (!modal) return;
+  modal.querySelectorAll('[data-close="modal"]').forEach((el) => {
+    el.addEventListener('click', closeModal);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.hidden) closeModal();
+  });
+}
+
+function closeModal() {
+  const modal = document.getElementById('interviewModal');
+  if (!modal) return;
+  modal.hidden = true;
+  document.body.style.overflow = '';
 }
 
 async function onDeleteOne(id) {
@@ -288,7 +388,7 @@ async function onDeleteOne(id) {
     await api.deleteInterview(id);
     location.reload();
   } catch (err) {
-    alert('Помилка видалення: ' + err.message);
+    alert(err.message);
   } finally {
     loader.hidden = true;
   }
@@ -303,7 +403,7 @@ async function onDeleteAll() {
     alert(`Видалено інтерв'ю: ${result.deleted}`);
     location.reload();
   } catch (err) {
-    alert('Помилка: ' + err.message);
+    alert(err.message);
   } finally {
     loader.hidden = true;
   }
@@ -374,28 +474,41 @@ async function exportToPdf() {
   exportPdfBtn.disabled = true;
   exportPdfBtn.textContent = '⏳ Генерую PDF…';
 
-  // Тимчасово приховуємо кнопку генерації roadmap (її в PDF не треба)
-  const hiddenWhileExport = [generateRoadmapBtn];
-  hiddenWhileExport.forEach((el) => (el.style.visibility = 'hidden'));
+  // Тимчасово приховуємо контроли, які не потрібні у PDF
+  const hiddenWhileExport = [generateRoadmapBtn, document.getElementById('deleteAllBtn'), benchmarkSelect];
+  hiddenWhileExport.forEach((el) => el && (el.style.visibility = 'hidden'));
+
+  const deleteIcons = element.querySelectorAll('.btn-delete-icon');
+  deleteIcons.forEach((el) => (el.style.visibility = 'hidden'));
+
+  // Вмикаємо PDF-режим (фіксована сітка, кращі page-breaks)
+  element.classList.add('pdf-mode');
 
   const fileName = `SkillScope_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
 
   try {
     await html2pdf()
       .set({
-        margin: [10, 10, 10, 10],
+        margin: [12, 10, 12, 10],
         filename: fileName,
         image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          windowWidth: 794, // ширина A4 @ 96dpi
+        },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['.roadmap-module', '.chart-card', '.stat-card', '.interview-item'] },
       })
       .from(element)
       .save();
   } catch (err) {
-    alert('Помилка експорту PDF: ' + err.message);
+    alert(err.message);
   } finally {
-    hiddenWhileExport.forEach((el) => (el.style.visibility = ''));
+    element.classList.remove('pdf-mode');
+    hiddenWhileExport.forEach((el) => el && (el.style.visibility = ''));
+    deleteIcons.forEach((el) => (el.style.visibility = ''));
     exportPdfBtn.disabled = false;
     exportPdfBtn.textContent = '📄 Завантажити PDF-звіт';
   }

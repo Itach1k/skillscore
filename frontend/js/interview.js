@@ -106,11 +106,29 @@ async function startInterview(topic, mode = 'technical', vacancyText = undefined
     currentTopicEl.textContent = topic || 'Інтерв\'ю за резюме';
     appendMessage('assistant', message);
     messageInput.focus();
+    enableUnloadGuard();
   } catch (err) {
-    alert('Помилка: ' + err.message);
+    alert(err.message);
   } finally {
     showLoader(false);
   }
+}
+
+/* ─── Захист від випадкового закриття під час інтерв'ю ─── */
+
+function beforeUnloadHandler(e) {
+  e.preventDefault();
+  // Більшість сучасних браузерів показує власне повідомлення; цей текст резервний.
+  e.returnValue = 'Активне інтерв\'ю буде втрачено. Дійсно вийти?';
+  return e.returnValue;
+}
+
+function enableUnloadGuard() {
+  window.addEventListener('beforeunload', beforeUnloadHandler);
+}
+
+function disableUnloadGuard() {
+  window.removeEventListener('beforeunload', beforeUnloadHandler);
 }
 
 async function sendMessage() {
@@ -133,7 +151,7 @@ async function sendMessage() {
     appendMessage('assistant', message);
   } catch (err) {
     typingEl.remove();
-    alert('Помилка: ' + err.message);
+    alert(err.message);
   } finally {
     sendBtn.disabled = false;
     messageInput.focus();
@@ -149,13 +167,14 @@ async function endInterview() {
     const { analysis } = await api.completeInterview(currentInterviewId);
     renderAnalysis(analysis);
   } catch (err) {
-    alert('Помилка аналізу: ' + err.message);
+    alert(err.message);
   } finally {
     showLoader(false);
   }
 }
 
 function renderAnalysis(a) {
+  disableUnloadGuard();
   chatInterface.hidden = true;
   analysisResult.hidden = false;
 
@@ -238,7 +257,7 @@ function setupCvHandlers() {
       cvSelectedSkills = new Set(result.skills);
       renderCvResult(result);
     } catch (err) {
-      alert('Помилка аналізу резюме: ' + err.message);
+      alert(err.message);
     } finally {
       showLoader(false);
       analyzeBtn.disabled = false;
