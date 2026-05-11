@@ -19,6 +19,7 @@ const statisticsRoutes = require('./routes/statisticsRoutes');
 const roadmapRoutes = require('./routes/roadmapRoutes');
 const benchmarkRoutes = require('./routes/benchmarkRoutes');
 const cvRoutes = require('./routes/cvRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +34,7 @@ app.use('/api/statistics', statisticsRoutes);
 app.use('/api/roadmap', roadmapRoutes);
 app.use('/api/benchmarks', benchmarkRoutes);
 app.use('/api/cv', cvRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 
