@@ -6,7 +6,8 @@
   <title>SkillScope — Профіль</title>
   <link rel="stylesheet" href="css/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
   <nav class="navbar">
@@ -36,12 +37,6 @@
     </div>
 
     <div id="profileContent" hidden>
-      <!-- Шапка для PDF -->
-      <div class="pdf-header" id="pdfHeader">
-        <h2>SkillScope — звіт про компетенції</h2>
-        <p id="pdfMeta"></p>
-      </div>
-
       <div class="stats-cards">
         <div class="stat-card">
           <div class="stat-label">Всього інтерв'ю</div>

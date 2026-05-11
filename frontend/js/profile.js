@@ -10,6 +10,7 @@
 
 import { api } from './api.js';
 import { waitForAuth } from './auth.js';
+import { generatePdfReport } from './pdfReport.js';
 
 const $ = (id) => document.getElementById(id);
 const emptyState = $('emptyState');
@@ -39,8 +40,12 @@ const MODE_BADGES = {
 };
 
 let radarChartInstance = null;
+let lineChartInstance = null;
 let currentStats = null;
 let currentBenchmarks = null;
+let currentBenchmarkKey = 'junior';
+let currentInterviews = [];
+let currentRoadmap = null;
 let currentUser = null;
 
 (async function init() {
@@ -64,19 +69,20 @@ let currentUser = null;
 
     currentStats = stats;
     currentBenchmarks = benchmarksResp?.benchmarks || null;
+    currentInterviews = interviewsResp.interviews || [];
+    currentRoadmap = roadmapResp?.roadmap || null;
 
     profileContent.hidden = false;
     exportPdfBtn.hidden = false;
 
-    fillPdfHeader(user, stats);
     fillSummaryCards(stats);
     drawRadar(stats.byCriteria, 'junior');
     drawLine(stats.progressTrend);
     fillStatsTable(stats.byCriteria);
-    fillInterviewsList(interviewsResp.interviews || []);
+    fillInterviewsList(currentInterviews);
 
-    if (roadmapResp?.roadmap) {
-      renderRoadmap(roadmapResp.roadmap, roadmapResp.generatedAt);
+    if (currentRoadmap) {
+      renderRoadmap(currentRoadmap, roadmapResp.generatedAt);
     }
 
     bindControls();
@@ -90,7 +96,8 @@ let currentUser = null;
 
 function bindControls() {
   benchmarkSelect.addEventListener('change', () => {
-    drawRadar(currentStats.byCriteria, benchmarkSelect.value);
+    currentBenchmarkKey = benchmarkSelect.value;
+    drawRadar(currentStats.byCriteria, currentBenchmarkKey);
   });
 
   generateRoadmapBtn.addEventListener('click', async () => {
@@ -113,12 +120,6 @@ function bindControls() {
 
   const deleteAllBtn = document.getElementById('deleteAllBtn');
   if (deleteAllBtn) deleteAllBtn.addEventListener('click', onDeleteAll);
-}
-
-function fillPdfHeader(user, stats) {
-  const date = new Date().toLocaleDateString('uk-UA');
-  $('pdfMeta').textContent =
-    `Користувач: ${user.displayName || user.email} • Дата звіту: ${date} • Інтерв'ю: ${stats.totalInterviews}`;
 }
 
 function fillSummaryCards(stats) {
@@ -191,7 +192,8 @@ function drawRadar(byCriteria, benchmarkKey) {
 
 function drawLine(trend) {
   const ctx = document.getElementById('lineChart');
-  new Chart(ctx, {
+  if (lineChartInstance) lineChartInstance.destroy();
+  lineChartInstance = new Chart(ctx, {
     type: 'line',
     data: {
       labels: trend.map((p) => `Сесія ${p.index}`),
@@ -470,46 +472,26 @@ function renderRoadmap(roadmap, generatedAt) {
 }
 
 async function exportToPdf() {
-  const element = document.getElementById('profileContent');
   exportPdfBtn.disabled = true;
+  const originalText = exportPdfBtn.textContent;
   exportPdfBtn.textContent = '⏳ Генерую PDF…';
 
-  // Тимчасово приховуємо контроли, які не потрібні у PDF
-  const hiddenWhileExport = [generateRoadmapBtn, document.getElementById('deleteAllBtn'), benchmarkSelect];
-  hiddenWhileExport.forEach((el) => el && (el.style.visibility = 'hidden'));
-
-  const deleteIcons = element.querySelectorAll('.btn-delete-icon');
-  deleteIcons.forEach((el) => (el.style.visibility = 'hidden'));
-
-  // Вмикаємо PDF-режим (фіксована сітка, кращі page-breaks)
-  element.classList.add('pdf-mode');
-
-  const fileName = `SkillScope_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
-
   try {
-    await html2pdf()
-      .set({
-        margin: [12, 10, 12, 10],
-        filename: fileName,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          windowWidth: 794, // ширина A4 @ 96dpi
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'], avoid: ['.roadmap-module', '.chart-card', '.stat-card', '.interview-item'] },
-      })
-      .from(element)
-      .save();
+    await generatePdfReport({
+      user: currentUser,
+      stats: currentStats,
+      benchmarks: currentBenchmarks,
+      benchmarkKey: currentBenchmarkKey,
+      interviews: currentInterviews,
+      roadmap: currentRoadmap,
+      radarChart: radarChartInstance,
+      lineChart: lineChartInstance,
+    });
   } catch (err) {
-    alert(err.message);
+    console.error('PDF export error:', err);
+    alert('Не вдалося згенерувати PDF: ' + err.message);
   } finally {
-    element.classList.remove('pdf-mode');
-    hiddenWhileExport.forEach((el) => el && (el.style.visibility = ''));
-    deleteIcons.forEach((el) => (el.style.visibility = ''));
     exportPdfBtn.disabled = false;
-    exportPdfBtn.textContent = '📄 Завантажити PDF-звіт';
+    exportPdfBtn.textContent = originalText;
   }
 }
