@@ -1,9 +1,9 @@
 /**
  * Спільний обробник помилок від Gemini API.
- * Формує адекватні повідомлення для користувача залежно від ситуації:
- *   - 429 + малий retryDelay  → RPM burst, варто почекати
- *   - 429 + великий retryDelay → денний ліміт (RPD)
- *   - враховує поточну модель і не пропонує перейти на ту саму
+ * Аналізує тип квоти з QuotaFailure.violations:
+ *   - PerMinute (RPM)  → короткочасний burst, варто почекати
+ *   - PerDay (RPD)     → денний ліміт, чекати безглуздо
+ *   - PerModelPerMinute input tokens → ліміт на токени
  */
 
 function parseRetryDelay(retryStr) {
@@ -12,31 +12,61 @@ function parseRetryDelay(retryStr) {
   return m ? parseFloat(m[1]) : null;
 }
 
-function buildQuotaMessage(err) {
+function classifyQuotaError(err) {
+  const quotaFailure = err.errorDetails?.find((d) =>
+    String(d['@type']).includes('QuotaFailure')
+  );
   const retryInfo = err.errorDetails?.find((d) =>
     String(d['@type']).includes('RetryInfo')
   );
-  const delaySec = parseRetryDelay(retryInfo?.retryDelay);
-  const delayStr = retryInfo?.retryDelay || '60s';
 
+  const violations = quotaFailure?.violations || [];
+  const isDaily = violations.some((v) => String(v.quotaId || '').includes('PerDay'));
+  const isPerMinute = violations.some((v) => String(v.quotaId || '').includes('PerMinute'));
+  const isTokenLimit = violations.some((v) =>
+    String(v.quotaMetric || '').includes('input_token_count')
+  );
+
+  // Витягуємо реальне значення ліміту, якщо API його повернув
+  const dailyViolation = violations.find((v) => String(v.quotaId || '').includes('PerDay'));
+  const dailyLimit = dailyViolation?.quotaValue ? parseInt(dailyViolation.quotaValue) : null;
+
+  return {
+    isDaily,
+    isPerMinute,
+    isTokenLimit,
+    dailyLimit,
+    retrySec: parseRetryDelay(retryInfo?.retryDelay),
+  };
+}
+
+function buildQuotaMessage(err) {
+  const { isDaily, isTokenLimit, dailyLimit, retrySec } = classifyQuotaError(err);
   const currentModel = (process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite').toLowerCase();
   const onLiteAlready = currentModel.includes('flash-lite');
 
-  // delay > 90s ≈ це денний ліміт (RPD reset до півночі за PT)
-  const isLikelyDaily = delaySec !== null && delaySec > 90;
-
-  if (isLikelyDaily) {
-    return `Вичерпано денний ліміт Gemini API на безкоштовному тарифі ` +
-      `(${onLiteAlready ? '1000 запитів/добу' : '250–1000 запитів/добу'}). ` +
-      `Ліміт скинеться о 10:00 за київським часом (північ за тихоокеанським). ` +
-      `Альтернатива — увімкнути білінг у Google Cloud для збільшення квоти.`;
+  if (isDaily) {
+    const limitText = dailyLimit !== null ? `${dailyLimit} запитів/добу` : 'денний ліміт';
+    return (
+      `Вичерпано ${limitText} Gemini API на безкоштовному тарифі для моделі ${currentModel}. ` +
+      `Квота скинеться о 10:00 за київським часом (північ за тихоокеанським). ` +
+      `Якщо ліміт малий (20-50/добу) — це нові обмеження Google для безкоштовних акаунтів. ` +
+      `Рішення: 1) створити новий API-ключ у іншому Google-акаунті, або 2) увімкнути білінг у Google Cloud (перші $300 кредитів — безкоштовно для нових проєктів).`
+    );
   }
 
-  // RPM burst — короткочасне перевищення
-  const wait = delaySec ? `~${Math.ceil(delaySec)} сек` : delayStr;
+  if (isTokenLimit) {
+    return (
+      `Перевищено хвилинний ліміт на кількість вхідних токенів. ` +
+      `Зачекайте 60 сек і повторіть. Якщо проблема повторюється — резюме/вакансія занадто довгі.`
+    );
+  }
+
+  // RPM burst
+  const wait = retrySec ? `~${Math.ceil(retrySec)} сек` : '60 сек';
   const advice = onLiteAlready
-    ? 'Ви вже на найгенерознішій безкоштовній моделі. Просто почекайте і повторіть дію.'
-    : `Можна перейти на «gemini-2.5-flash-lite» у backend/.env (15 RPM / 1000 запитів/добу).`;
+    ? 'Ви вже на найгенерознішій безкоштовній моделі.'
+    : `Альтернатива — змінити GEMINI_MODEL на gemini-2.5-flash-lite.`;
 
   return `Забагато запитів за хвилину до Gemini API. Зачекайте ${wait} і повторіть. ${advice}`;
 }
@@ -52,14 +82,13 @@ function handleApiError(res, err, prefix = '') {
     return res.status(429).json({ error: buildQuotaMessage(err) });
   }
 
-  // 400 з ШІ — найчастіше неприпустимий промпт чи parsing JSON
   if (err.status === 400) {
     return res.status(502).json({
-      error: 'ШІ повернув некоректну відповідь. Спробуйте ще раз або змініть запит.',
+      error: 'ШІ повернув некоректну відповідь. Спробуйте ще раз.',
     });
   }
 
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 }
 
-module.exports = { handleApiError, buildQuotaMessage };
+module.exports = { handleApiError, buildQuotaMessage, classifyQuotaError };
